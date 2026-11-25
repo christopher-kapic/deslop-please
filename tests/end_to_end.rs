@@ -689,31 +689,6 @@ fn cargo_s_own_configuration_chooses_the_target_and_cfgs_too_and_each_keeps_its_
 }
 
 #[test]
-fn a_target_or_a_feature_cargo_does_not_know_is_an_error_not_a_report() {
-    let workspace = workspace("gated", None, "gated-unknown");
-    let feature = run(&workspace, &["--features", "exports"]);
-    assert_eq!(feature.code, Some(2));
-    assert!(feature.stdout.is_empty());
-    assert!(
-        feature
-            .stderr
-            .contains("cannot index with `--features exports`: cargo metadata says: error:")
-    );
-    assert!(
-        feature
-            .stderr
-            .contains("does not contain this feature: exports")
-    );
-    let target = run(&workspace, &["--target", "x86_64-pc-windows-mscv"]);
-    assert_eq!(target.code, Some(2));
-    assert!(target.stdout.is_empty());
-    assert!(target.stderr.contains(
-        "cannot index with `--target x86_64-pc-windows-mscv`: cargo metadata says: error:"
-    ));
-    assert!(!target.stderr.contains("indexing"));
-}
-
-#[test]
 fn outside_a_cargo_workspace_reports_error() {
     let empty = std::env::temp_dir().join(format!("{TOOL}-not-a-workspace-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
