@@ -155,7 +155,7 @@ impl<'a> Builder<'a> {
         let path = symbol
             .module()
             .ok_or_else(|| not_understood(NOT_THE_FILES_MODULE))?;
-        let Some(module) = self.module(&symbol, &path) else {
+        let Some(mut module) = self.module(&symbol, &path) else {
             return Ok(());
         };
         let on_disk = self.workspace.root.join(&*document.path);
@@ -164,7 +164,15 @@ impl<'a> Builder<'a> {
         let lines = text.lines().count();
         let source = Source::new(text);
         let package_root = self.target_roots.get(&*document.path) == Some(&module);
-        check_files_module(first, source.whole(), package_root).map_err(not_understood)?;
+        match check_files_module(first, source.whole(), package_root) {
+            Ok(()) => {}
+            Err(ANOTHER_TARGETS_MODULE) => {
+                module = self
+                    .included_module(document, module)?
+                    .ok_or_else(|| not_understood(ANOTHER_TARGETS_MODULE))?;
+            }
+            Err(why) => return Err(not_understood(why)),
+        }
         let file = FileId::new(self.files.len());
         self.files.push(File {
             path: document.path.to_string(),
@@ -225,6 +233,35 @@ impl<'a> Builder<'a> {
         }
         self.units.push(unit);
         Ok(())
+    }
+
+    /// The module of a file that the first target holding it holds through
+    /// an `include!` inside a module, `mod build { include!("b.rs"); }`. The
+    /// index writes the including file's module, `including`, over the whole
+    /// text, but defines the file's items in the module the `include!` is in.
+    /// That is the one every definition is written in or inside. `None` when
+    /// the file defines nothing, or that module is not `including` or inside it.
+    fn included_module(
+        &mut self,
+        document: &Document<'a>,
+        including: NodeId,
+    ) -> Result<Option<NodeId>, Error> {
+        let mut module: Option<NodeId> = None;
+        for occurrence in document.occurrences.iter().filter(|o| o.definition) {
+            let Some(symbol) = parse(occurrence.symbol)? else {
+                continue;
+            };
+            let mut path = symbol.namespaces();
+            // A module is written in its parent.
+            if symbol.module().is_some() && path.pop().is_none() {
+                return Ok(None);
+            }
+            let Some(placed) = self.module(&symbol, &path) else {
+                return Ok(None);
+            };
+            module = Some(module.map_or(placed, |known| self.tree.common_ancestor(known, placed)));
+        }
+        Ok(module.filter(|&module| self.tree.ancestors(module).any(|id| id == including)))
     }
 
     /// `imports`: where the unit's `use` declarations are, in order.
@@ -563,7 +600,8 @@ const ANOTHER_TARGETS_MODULE: &str =
 /// file only through an `include!`, and the module is the including file's.
 /// That is the file's own only when both files are roots of the package's
 /// targets: `package_root` says the file is one, and `first` names the
-/// package's root module.
+/// package's root module. Otherwise the caller reads the file's module from
+/// its definitions.
 fn check_files_module(
     first: &Occurrence,
     whole: Range,

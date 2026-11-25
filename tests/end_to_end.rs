@@ -594,6 +594,21 @@ fn a_binary_that_includes_another_binarys_root_changes_nothing_however_the_two_s
 }
 
 #[test]
+fn a_file_included_inside_a_module_is_that_module() {
+    let flags = run(&workspace("included_module", None, "included_module"), &[]);
+    assert_eq!(flags.code, Some(1));
+    assert!(flags.stdout.contains(
+        "error[field-leak]: `Flags::names` is known outside `Flags`: 1 place in 1 module\n\
+         \x20 --> build.rs:6:1\n"
+    ));
+    assert!(flags.stdout.contains("kept: target"));
+    assert_eq!(
+        variant_keys("included_module", None),
+        ["field-leak flags::flags::Flags::names"]
+    );
+}
+
+#[test]
 fn a_target_or_features_bring_in_the_code_behind_their_cfg_and_each_keeps_its_index() {
     let workspace = workspace("gated", None, "gated");
     let console = "module-cycle gated::console::handle,gated::console::modes";

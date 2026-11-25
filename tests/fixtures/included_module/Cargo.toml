@@ -1,0 +1,11 @@
+[package]
+name = "flags"
+version = "0.1.0"
+edition = "2024"
+
+# `src/flags.rs` is a `#[path]` module of the build script, and the test
+# `include!`s it inside a `mod flags { ... }` of its own. rust-analyzer writes
+# the test's root module over the file's whole text and defines its items in
+# `flags`.
+
+[workspace]
